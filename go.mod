@@ -1,4 +1,4 @@
-module github.com/JedBeom/madon
+module github.com/JedBeom/madon/v3
 
 go 1.12
 
