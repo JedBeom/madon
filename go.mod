@@ -1,4 +1,4 @@
-module github.com/McKael/madon/v2
+module github.com/JedBeom/madon/v2
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
