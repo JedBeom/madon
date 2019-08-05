@@ -507,7 +507,7 @@ func (mc *Client) UpdateAccountReader(cmdParams UpdateAccountParams) (*Account, 
 	w := multipart.NewWriter(&formBuf)
 
 	if cmdParams.AvatarImageReader != nil {
-		formWriter, err := w.CreateFormField("avatar")
+		formWriter, err := w.CreateFormFile("avatar", "file")
 		if err != nil {
 			return nil, errors.Wrap(err, "avatar upload")
 		}
@@ -517,7 +517,7 @@ func (mc *Client) UpdateAccountReader(cmdParams UpdateAccountParams) (*Account, 
 		}
 	}
 	if cmdParams.HeaderImageReader != nil {
-		formWriter, err := w.CreateFormField("header")
+		formWriter, err := w.CreateFormFile("header", "header")
 		if err != nil {
 			return nil, errors.Wrap(err, "header upload")
 		}
