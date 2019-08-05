@@ -10,9 +10,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"os"
-	"path/filepath"
 	"strconv"
 
 	"github.com/pkg/errors"
@@ -35,14 +35,16 @@ type getAccountsOptions struct {
 
 // UpdateAccountParams contains option fields for the UpdateAccount command
 type UpdateAccountParams struct {
-	DisplayName      *string
-	Note             *string
-	AvatarImagePath  *string
-	HeaderImagePath  *string
-	Locked           *bool
-	Bot              *bool
-	FieldsAttributes *[]Field
-	Source           *SourceParams
+	DisplayName       *string
+	Note              *string
+	AvatarImagePath   *string
+	AvatarImageReader io.Reader
+	HeaderImagePath   *string
+	HeaderImageReader io.Reader
+	Locked            *bool
+	Bot               *bool
+	FieldsAttributes  *[]Field
+	Source            *SourceParams
 }
 
 // updateRelationship returns a Relationship entity
@@ -424,6 +426,35 @@ func (mc *Client) FollowRequestAuthorize(accountID int64, authorize bool) error 
 // You can set 'Bot' to true to indicate this is a service (automated) account.
 // I'm not sure images can be deleted -- only replaced AFAICS.
 func (mc *Client) UpdateAccount(cmdParams UpdateAccountParams) (*Account, error) {
+	if cmdParams.AvatarImagePath != nil {
+		f, err := os.Open(*cmdParams.AvatarImagePath)
+		if err != nil {
+			return nil, errors.Wrap(err, "read avatar")
+		}
+		defer f.Close()
+		cmdParams.AvatarImageReader = f
+	}
+
+	if cmdParams.HeaderImagePath != nil {
+		f, err := os.Open(*cmdParams.HeaderImagePath)
+		if err != nil {
+			return nil, errors.Wrap(err, "read header")
+		}
+		defer f.Close()
+		cmdParams.HeaderImageReader = f
+	}
+
+	return mc.UpdateAccountReader(cmdParams)
+}
+
+// UpdateAccountReader updates the connected user's account data
+//
+// All fields can be nil, in which case they are not updated.
+// 'DisplayName' and 'Note' can be set to "" to delete previous values.
+// Setting 'Locked' to true means all followers should be approved.
+// You can set 'Bot' to true to indicate this is a service (automated) account.
+// I'm not sure images can be deleted -- only replaced AFAICS.
+func (mc *Client) UpdateAccountReader(cmdParams UpdateAccountParams) (*Account, error) {
 	const endPoint = "accounts/update_credentials"
 	params := make(apiCallParams)
 
@@ -472,35 +503,27 @@ func (mc *Client) UpdateAccount(cmdParams UpdateAccountParams) (*Account, error)
 		}
 	}
 
-	var err error
-	var avatar, headerImage []byte
-
-	avatar, err = readFile(cmdParams.AvatarImagePath)
-	if err != nil {
-		return nil, err
-	}
-
-	headerImage, err = readFile(cmdParams.HeaderImagePath)
-	if err != nil {
-		return nil, err
-	}
-
 	var formBuf bytes.Buffer
 	w := multipart.NewWriter(&formBuf)
 
-	if avatar != nil {
-		formWriter, err := w.CreateFormFile("avatar", filepath.Base(*cmdParams.AvatarImagePath))
+	if cmdParams.AvatarImageReader != nil {
+		formWriter, err := w.CreateFormField("avatar")
 		if err != nil {
 			return nil, errors.Wrap(err, "avatar upload")
 		}
-		formWriter.Write(avatar)
+
+		if _, err = io.Copy(formWriter, cmdParams.AvatarImageReader); err != nil {
+			return nil, errors.Wrap(err, "avatar upload")
+		}
 	}
-	if headerImage != nil {
-		formWriter, err := w.CreateFormFile("header", filepath.Base(*cmdParams.HeaderImagePath))
+	if cmdParams.HeaderImageReader != nil {
+		formWriter, err := w.CreateFormField("header")
 		if err != nil {
 			return nil, errors.Wrap(err, "header upload")
 		}
-		formWriter.Write(headerImage)
+		if _, err = io.Copy(formWriter, cmdParams.HeaderImageReader); err != nil {
+			return nil, errors.Wrap(err, "header upload")
+		}
 	}
 	w.Close()
 
